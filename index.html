@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101014">
+  <meta name="description" content="Her gün serini devam ettir, alevinin büyümesini izle.">
+  <meta name="alev-build" content="flat-assets-v15">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <title>Alev Serisi</title>
+  <meta name="color-scheme" content="dark">
+  <style>
+    @property --flame { syntax: "<color>"; inherits: true; initial-value: #36b9ff; }
+    @property --flame-mid { syntax: "<color>"; inherits: true; initial-value: #9ae8ff; }
+    @property --flame-core { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+    @property --ambient { syntax: "<color>"; inherits: true; initial-value: #168dff; }
+    @property --fire-scale { syntax: "<number>"; inherits: true; initial-value: .46; }
+    :root {
+      color-scheme: dark;
+      --bg:#0d0c12; --panel:#191820; --panel-2:#202029; --text:#f4f2f7; --muted:#918c9d;
+      --line:#2b2934; --flame:#36b9ff; --flame-mid:#9ae8ff; --flame-core:#ffffff; --ambient:#168dff;
+      --fire-scale:.46; --fire-glow:.34; --spark-opacity:.5; --ambient-opacity:.22;
+      transition:--ambient 1.5s ease, --flame 1.4s ease, --flame-mid 1.4s ease, --flame-core 1.4s ease;
+    }
+    * { box-sizing:border-box; }
+    html { min-height:100%; background:var(--bg); }
+    body {
+      margin:0; min-height:100vh; color:var(--text); background:#0d0c12; position:relative; isolation:isolate; overflow-x:hidden;
+      font-family:ui-rounded,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    .screen-ambience { position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; opacity:var(--ambient-opacity); transition:opacity 1.2s ease; contain:paint; }
+    .screen-ambience::before { content:""; position:absolute; inset:-22%; background:
+      radial-gradient(ellipse at 50% 38%, color-mix(in srgb,var(--ambient) 57%,transparent) 0%, transparent 48%),
+      radial-gradient(ellipse at 50% 70%, color-mix(in srgb,var(--flame) 37%,transparent) 0%, transparent 53%);
+      transform:translate3d(0,0,0); transform-origin:center; animation:screen-ambience-breathe 8s ease-in-out infinite;  }
+    .screen-ambience::after { content:""; position:absolute; inset:0; background:
+      radial-gradient(ellipse at 50% 43%,color-mix(in srgb,var(--flame) 34%,transparent) 0%,transparent 58%),
+      radial-gradient(ellipse at 50% 76%,color-mix(in srgb,var(--ambient) 23%,transparent) 0%,transparent 70%);
+      opacity:.13; transition:opacity .25s ease; }
+    .app { position:relative; z-index:1; width:min(100%,520px); min-height:100vh; margin:0 auto; padding:calc(22px + env(safe-area-inset-top)) 22px calc(28px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
+    .app[hidden] { display:none !important; }
+    header { display:flex; align-items:center; justify-content:center; min-height:36px; margin-bottom:8px; position:relative; }
+    .sound-toggle { position:absolute; right:0; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:36px; height:36px; border:1px solid var(--line); border-radius:12px; color:var(--muted); background:rgba(25,24,32,.82); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .sound-toggle svg { width:19px;height:19px;display:block; }
+    .sound-toggle[aria-pressed="true"] { color:var(--flame-mid); border-color:color-mix(in srgb,var(--flame) 38%,var(--line)); box-shadow:0 0 16px color-mix(in srgb,var(--flame) 12%,transparent); }
+    .sound-toggle:focus-visible { outline:2px solid var(--flame-mid);outline-offset:3px; }
+    body.viewport-changing .screen-ambience::before, body.viewport-changing .screen-ambience::after,
+    body.viewport-changing .flame-stage::before, body.viewport-changing .flame-stage::after,
+    body.viewport-changing .flame-waver, body.viewport-changing .flame-left, body.viewport-changing .flame-right,
+    body.viewport-changing .flame-middle, body.viewport-changing .flame-core, body.viewport-changing .flame-hotspot,
+    body.viewport-changing .spark, body.viewport-changing .burst-particle, body.viewport-changing .burst-flare,
+    body.viewport-changing .burst-ring, body.viewport-changing .burst-orbit, body.viewport-changing .burst-ray,
+    body.viewport-changing .celebration-veil { animation-play-state:paused !important; }
+    .brand { font-size:13px; font-weight:800; letter-spacing:.19em; color:#a6a1b4; text-transform:uppercase; }
+    .hero { display:flex; flex-direction:column; align-items:center; text-align:center; padding-top:12px; }
+
+    /* Şeffaf SVG + hafif CSS animasyonları. Siyah yüzey/Canvas kullanılmaz. */
+    .flame-stage {
+      width:100%; height:clamp(240px, 40vh, 310px); position:relative; isolation:isolate;
+      display:grid; place-items:center; margin:3px 0 0; overflow:visible; background:transparent !important;
+      --stage-boost:1;
+    }
+    .flame-stage::before {
+      content:""; position:absolute; z-index:0; pointer-events:none; inset:1% 0 0;
+      background:
+        radial-gradient(ellipse at 50% 72%, color-mix(in srgb,var(--ambient) 23%,transparent) 0%, transparent 47%),
+        radial-gradient(ellipse at 50% 54%, color-mix(in srgb,var(--flame) 13%,transparent) 0%, transparent 65%);
+      opacity:var(--stage-glow,.6); transform:translateZ(0); animation:ambient-breath 5.6s ease-in-out infinite;
+    }
+    .flame-stage::after {
+      content:""; position:absolute; z-index:0; pointer-events:none; width:48%; height:17%; left:26%; bottom:5%;
+      border:1px solid color-mix(in srgb,var(--ambient) 29%,transparent); border-top-color:color-mix(in srgb,var(--flame-mid) 42%,transparent);
+      border-radius:50%; background:radial-gradient(ellipse, color-mix(in srgb,var(--ambient) 13%,transparent),transparent 70%);
+      opacity:var(--halo-opacity,.28); transform:perspective(180px) rotateX(58deg); animation:ground-halo 6s ease-in-out infinite;
+    }
+    .fire-svg { contain:layout paint; position:absolute; inset:0; display:block; width:100%; height:100%; overflow:hidden; background:transparent !important; z-index:1; pointer-events:none; }
+    .fire-scale { transform:scale(var(--fire-scale)); transform-origin:50% 100%; transform-box:fill-box; transition:transform 1.05s cubic-bezier(.18,.78,.22,1); }
+    .flame-waver { transform-origin:50% 100%; transform-box:fill-box; animation:flame-sway 2.7s cubic-bezier(.45,.05,.55,.95) infinite; }
+    .outer-stop-base { stop-color:var(--flame); transition:stop-color 1.45s ease; }
+    .outer-stop-mid { stop-color:var(--flame-mid); transition:stop-color 1.45s ease; }
+    .outer-stop-tip { stop-color:var(--flame-mid); transition:stop-color 1.45s ease; }
+    .inner-stop-base { stop-color:var(--flame-mid); transition:stop-color 1.45s ease; }
+    .inner-stop-hot { stop-color:var(--flame-core); transition:stop-color 1.45s ease; }
+    .flame-outer { fill:url(#outerGradient); }
+    .flame-left { fill:url(#innerGradient); opacity:.86; transform-box:fill-box; transform-origin:50% 100%; animation:lick-left 2.35s cubic-bezier(.45,.05,.55,.95) infinite; }
+    .flame-right { fill:url(#innerGradient); opacity:.76; transform-box:fill-box; transform-origin:50% 100%; animation:lick-right 2.75s cubic-bezier(.45,.05,.55,.95) infinite; }
+    .flame-middle { fill:url(#middleGradient); opacity:.92; transform-box:fill-box; transform-origin:50% 100%; animation:lick-middle 1.95s cubic-bezier(.45,.05,.55,.95) infinite; }
+    .flame-core { fill:url(#coreGradient); opacity:.9; transform-box:fill-box; transform-origin:50% 100%; animation:core-flicker 1.65s ease-in-out infinite; }
+    .flame-hotspot { fill:#fff; opacity:.58; transform-box:fill-box; transform-origin:center; animation:hotspot 2.15s ease-in-out infinite; }
+    .spark { fill:var(--flame-mid); opacity:0; transform-box:fill-box; transform-origin:center; animation:ember-rise var(--duration,2.4s) ease-out var(--delay,0s) infinite; transition:fill 1.4s ease; }
+    .spark:nth-of-type(2n) { fill:var(--flame-core); }
+    .flame-stage[data-theme="blue"] .spark { fill:#baf5ff; }
+    body[data-theme="blue"] .screen-ambience::before { animation-name:screen-ambience-breathe; }
+    body[data-theme="orange"] .screen-ambience::before { animation-name:golden-bloom; }
+    body[data-theme="red"] .screen-ambience::before { animation-name:red-ambient; }
+    body[data-theme="white"] .screen-ambience::before { animation-name:white-aura; }
+    body[data-theme="purple"] .screen-ambience::before { animation-name:violet-ambient; }
+    .flame-stage[data-theme="orange"] .spark { fill:#ffe0a4; animation-duration:1.9s; }
+    .flame-stage[data-theme="red"]::before { animation-name:red-ambient; }
+    .flame-stage[data-theme="red"] .spark { fill:#ff9aa7; animation-duration:1.7s; }
+    .flame-stage[data-theme="white"]::after { border-style:dashed; }
+    .flame-stage[data-theme="white"] .spark { fill:#fff; animation-duration:2.8s; }
+    .flame-stage[data-theme="purple"]::before { animation-name:violet-ambient; }
+    .flame-stage[data-theme="purple"]::after { border-style:dotted; animation-duration:4.2s; }
+    .flame-stage[data-theme="emerald"]::before { animation-name:emerald-bloom; }
+    .flame-stage[data-theme="emerald"] .spark { fill:#b9ffe7; animation-duration:2.25s; }
+    .flame-stage[data-theme="gold"]::before { animation-name:golden-bloom; }
+    .flame-stage[data-theme="gold"] .spark { fill:#fff0a8; animation-duration:1.8s; }
+    .flame-stage[data-theme="pink"]::before { animation-name:pink-drift; }
+    .flame-stage[data-theme="pink"] .spark { fill:#ffd1f3; animation-duration:2.15s; }
+    .flame-stage[data-theme="turquoise"]::before { animation-name:turquoise-wave; }
+    .flame-stage[data-theme="turquoise"]::after { border-style:double; }
+    .flame-stage[data-theme="turquoise"] .spark { fill:#c1fff5; animation-duration:2.55s; }
+    .flame-stage[data-theme="lime"]::before { animation-name:lime-pulse; }
+    .flame-stage[data-theme="lime"] .spark { fill:#f0ffb2; animation-duration:1.8s; }
+    .flame-stage[data-level="spark"] .flame-waver { animation-duration:3.3s; }
+    .flame-stage[data-level="ember"] .flame-waver { animation-duration:2.9s; }
+    .flame-stage[data-level="blaze"] .flame-waver { animation-duration:2.6s; }
+    .flame-stage[data-level="inferno"] .flame-waver { animation-duration:2.35s; }
+    .flame-stage[data-level="legend"] .flame-waver { animation-duration:2.12s; }
+    .flame-stage[data-level="blaze"] .flame-hotspot, .flame-stage[data-level="inferno"] .flame-hotspot, .flame-stage[data-level="legend"] .flame-hotspot { opacity:.78; }
+    .flame-stage[data-level="legend"] .flame-hotspot { animation-duration:1.45s; }
+    body[data-theme="gold"] .screen-ambience::before { animation-name:golden-bloom; }
+    body[data-theme="pink"] .screen-ambience::before { animation-name:pink-drift; }
+    body[data-theme="turquoise"] .screen-ambience::before { animation-name:turquoise-wave; }
+    body[data-theme="emerald"] .screen-ambience::before { animation-name:emerald-bloom; }
+    body[data-theme="lime"] .screen-ambience::before { animation-name:lime-pulse; }
+    body.celebrating .screen-ambience::after { animation:global-light-burst 1s ease-out; }
+    body.major-celebration .screen-ambience::after { animation:global-light-burst 1.6s cubic-bezier(.12,.74,.12,1) both; }
+    .flame-stage.ignite .fire-scale { animation:ignite-flame .92s cubic-bezier(.18,.78,.22,1); }
+    .flame-stage.milestone .fire-scale { animation:milestone-flame 1.35s cubic-bezier(.18,.78,.22,1); }
+    .flame-stage.milestone::before { animation:milestone-glow 1.35s ease-out; }
+    .flame-stage.milestone::after { animation:halo-awaken 1.35s ease-out; }
+    .burst-layer { position:absolute; inset:0; z-index:3; overflow:visible; pointer-events:none; }
+    .burst-particle { position:absolute; left:var(--x); top:var(--y); width:var(--size); height:var(--size); border-radius:50%; background:var(--particle-color,var(--flame-core)); box-shadow:0 0 4px var(--particle-color,var(--flame-core)); opacity:0; animation:particle-burst var(--duration,.95s) cubic-bezier(.16,.76,.25,1) forwards; }
+    .burst-particle.star { border-radius:1px; clip-path:polygon(50% 0,61% 36%,100% 50%,61% 64%,50% 100%,39% 64%,0 50%,39% 36%); }
+    .burst-ring { position:absolute; left:50%; top:78%; width:16px; height:10px; border:1.5px solid var(--flame-mid); border-radius:50%; opacity:0; transform:translate(-50%,-50%) scale(.15); animation:ring-burst 1s cubic-bezier(.2,.7,.25,1) forwards; }
+    .burst-ring.ring-two { width:24px; height:15px; border-style:dashed; animation-delay:.12s; }
+    .burst-ring.ring-three { width:35px; height:22px; border-width:1px; border-style:dotted; animation-delay:.24s; }
+    @keyframes screen-ambience-breathe { 0%,100% { transform:scale(1) translateY(0); opacity:.8 } 50% { transform:scale(1.06) translateY(-.8%); opacity:1 } }
+    @keyframes white-aura { 0%,100% { transform:scale(.99); opacity:.6 } 50% { transform:scale(1.08); opacity:1 } }
+    @keyframes emerald-bloom { 0%,100% { transform:scale(.98) translateY(.3%); opacity:.7 } 50% { transform:scale(1.08) translateY(-.4%); opacity:1 } }
+    @keyframes golden-bloom { 0%,100% { transform:scale(.97); opacity:.74; filter:brightness(1) } 48% { transform:scale(1.07); opacity:1; filter:none } }
+    @keyframes pink-drift { 0%,100% { transform:scale(1) translateX(-.4%); opacity:.78 } 50% { transform:scale(1.07) translateX(.4%); opacity:1 } }
+    @keyframes turquoise-wave { 0%,100% { transform:scale(.99) translateY(.4%); opacity:.78 } 50% { transform:scale(1.07) translateY(-.5%); opacity:1 } }
+    @keyframes lime-pulse { 0%,100% { transform:scale(.97); opacity:.72 } 50% { transform:scale(1.06); opacity:1 } }
+    @keyframes global-light-burst { 0% { opacity:.12 } 20% { opacity:.95 } 58% { opacity:.62 } 100% { opacity:.25 } }
+    @keyframes red-ambient { 0%,100% { transform:scale(.98); opacity:.7 } 50% { transform:scale(1.08); opacity:1 } }
+    @keyframes violet-ambient { 0%,100% { transform:scale(.95) rotate(-2deg); opacity:.74 } 50% { transform:scale(1.07) rotate(2deg); opacity:1 } }
+    @keyframes ground-halo { 0%,100% { transform:perspective(180px) rotateX(58deg) scale(.94); opacity:.2 } 50% { transform:perspective(180px) rotateX(58deg) scale(1.08); opacity:.42 } }
+    @keyframes flame-sway { 0%,100% { transform:skewX(-1deg) scaleX(.99) scaleY(1) } 33% { transform:skewX(1.5deg) scaleX(1.018) scaleY(1.014) } 68% { transform:skewX(-.8deg) scaleX(.986) scaleY(.987) } }
+    @keyframes lick-left { 0%,100% { transform:rotate(-3deg) scaleY(.96) translateX(-1px) } 45% { transform:rotate(2deg) scaleY(1.045) translateX(2px) } 72% { transform:rotate(-1deg) scaleY(1.01) translateX(0) } }
+    @keyframes lick-right { 0%,100% { transform:rotate(3deg) scaleY(1.02) translateX(1px) } 38% { transform:rotate(-4deg) scaleY(.92) translateX(-2px) } 72% { transform:rotate(1deg) scaleY(1.035) translateX(1px) } }
+    @keyframes lick-middle { 0%,100% { transform:skewX(-1deg) scaleY(1) } 38% { transform:skewX(2.2deg) scaleY(1.065) } 72% { transform:skewX(-1.7deg) scaleY(.955) } }
+    @keyframes core-flicker { 0%,100% { transform:scaleX(.97) scaleY(.985); opacity:.8 } 45% { transform:scaleX(1.045) scaleY(1.04); opacity:1 } }
+    @keyframes hotspot { 0%,100% { transform:translate(0,0) scale(.86); opacity:.3 } 50% { transform:translate(1px,-4px) scale(1.12); opacity:.72 } }
+    @keyframes ember-rise { 0% { transform:translate(0,0) scale(.45); opacity:0 } 14% { opacity:var(--spark-opacity) } 69% { opacity:calc(var(--spark-opacity)*.7) } 100% { transform:translate(var(--drift,5px),var(--rise,-55px)) scale(.12); opacity:0 } }
+    @keyframes ignite-flame { 0% { transform:scale(calc(var(--fire-scale)*.97)) } 35% { transform:scale(calc(var(--fire-scale)*1.15)) } 66% { transform:scale(calc(var(--fire-scale)*.99)) } 100% { transform:scale(var(--fire-scale)) } }
+    @keyframes milestone-flame { 0% { transform:scale(var(--fire-scale)) } 28% { transform:scale(calc(var(--fire-scale)*1.22)) } 54% { transform:scale(calc(var(--fire-scale)*.98)) } 100% { transform:scale(var(--fire-scale)) } }
+    @keyframes milestone-glow { 0% { opacity:.62 } 28% { opacity:1 } 100% { opacity:.88 } }
+    @keyframes halo-awaken { 0% { opacity:.2; transform:perspective(180px) rotateX(58deg) scale(.8) } 42% { opacity:.8; transform:perspective(180px) rotateX(58deg) scale(1.6) } 100% { opacity:.28; transform:perspective(180px) rotateX(58deg) scale(1) } }
+    @keyframes particle-burst { 0% { opacity:0; transform:translate(-50%,-50%) scale(.25) } 14% { opacity:1 } 100% { opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.12) } }
+    @keyframes ring-burst { 0% { opacity:.82; transform:translate(-50%,-50%) scale(.15) } 100% { opacity:0; transform:translate(-50%,-50%) scale(10) } }
+
+    .counter { margin-top:-3px; display:flex; flex-direction:column; align-items:center; }
+    .count { font-size:clamp(72px,19vw,94px); line-height:.98; font-weight:850; letter-spacing:-.065em; font-variant-numeric:tabular-nums; color:var(--flame); transition:color 1.1s; }
+    .count-label { color:var(--flame-mid); font-weight:800; font-size:15px; letter-spacing:.035em; margin-top:7px; transition:color 1.1s; }
+    .subtitle { color:var(--muted); font-size:13px; margin-top:12px; min-height:19px; }
+    .main-button { position:relative; isolation:isolate; overflow:hidden; width:100%; border:0; min-height:58px; border-radius:18px; color:#17131e; background:linear-gradient(108deg,var(--flame-mid),var(--flame-core) 52%,var(--flame-mid)); background-size:200% 100%; font:800 16px/1 system-ui,sans-serif; margin-top:25px; box-shadow:0 7px 25px color-mix(in srgb,var(--flame) 18%,transparent),inset 0 1px 0 #ffffff62; cursor:pointer; transition:transform .14s,filter .25s,box-shadow .5s,background-position .7s; }
+    .main-button::before { content:""; position:absolute; z-index:-1; width:12px;height:12px;left:var(--tap-x,50%);top:var(--tap-y,50%);border-radius:50%;background:#fff;opacity:0;transform:translate(-50%,-50%) scale(1); }
+    .main-button::after { content:"";position:absolute;inset:-80% -40%;background:linear-gradient(110deg,transparent 38%,#ffffff70 48%,#ffffff08 54%,transparent 63%);transform:translateX(-70%) rotate(8deg);opacity:0;pointer-events:none; }
+    .main-button:active { transform:scale(.975); filter:none; }
+    .main-button.ignite { animation:button-ignite .66s cubic-bezier(.16,.85,.3,1);box-shadow:0 0 0 1px color-mix(in srgb,var(--flame) 42%,transparent),0 0 26px color-mix(in srgb,var(--flame) 34%,transparent),inset 0 1px 0 #ffffff86;background-position:100% 50%; }
+    .main-button.ignite::before { animation:button-ripple .62s ease-out; }
+    .main-button.ignite::after { opacity:1;animation:button-sweep .7s ease-out; }
+    @keyframes button-ignite { 0%{transform:scale(1)} 22%{transform:scale(.965)} 48%{transform:scale(1.022)} 72%{transform:scale(.995)} 100%{transform:scale(1)} }
+    @keyframes button-ripple { 0%{opacity:.55;transform:translate(-50%,-50%) scale(1)} 100%{opacity:0;transform:translate(-50%,-50%) scale(25)} }
+    @keyframes button-sweep { 0%{transform:translateX(-70%) rotate(8deg)} 100%{transform:translateX(70%) rotate(8deg)} }
+    .count.pop { animation:count-pop .5s cubic-bezier(.18,.9,.25,1.2); }
+    @keyframes count-pop { 0%{transform:translateY(5px) scale(.8)} 48%{transform:translateY(-3px) scale(1.1);filter:brightness(1.35)} 100%{transform:translateY(0) scale(1);filter:brightness(1)} }
+    .main-button:focus-visible { outline:3px solid #fff;outline-offset:3px; }
+    .main-button.done { filter:saturate(.68); opacity:.88; cursor:default; box-shadow:0 5px 16px color-mix(in srgb,var(--flame) 12%,transparent); }
+    .main-button:disabled { cursor:default; }
+    .main-button.done:active { transform:none; filter:saturate(.68); }
+    .section { margin-top:30px; }
+    .section-head { display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:13px; }
+    .section-title { color:#e5e1ed;font-size:13px;font-weight:800;letter-spacing:.09em; }
+    .section-note { color:var(--muted);font-size:11px; }
+    .month-toggle { width:100%;border:1px solid var(--line);border-radius:14px;background:rgba(27,26,35,.8);color:#e5e1ed;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;font:800 13px/1 system-ui,sans-serif;letter-spacing:.09em;cursor:pointer; }
+    .month-toggle-side { display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:0; }
+    .chevron { width:18px;height:18px;transition:transform .2s ease; }
+    .month-toggle[aria-expanded="true"] .chevron { transform:rotate(180deg); }
+    .month-panel { margin-top:10px;animation:panel-in .2s ease-out; }
+    .month-panel[hidden] { display:none; }
+    @keyframes panel-in { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+    .week { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px; }
+    .day { display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0; }
+    .day-name { font-size:11px;color:var(--muted);font-weight:700; }
+    .day-dot { width:34px;height:34px;max-width:100%;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;color:#5e596b;font-size:14px;font-weight:800; }
+    .day-dot.completed { color:#121018;background:var(--flame-mid);border-color:transparent;box-shadow:0 2px 10px color-mix(in srgb,var(--flame) 18%,transparent); }
+    .day-dot.today { border:1.5px solid var(--flame);color:var(--text); }
+    .day-dot.today.completed { color:#121018; }
+    .month-card { padding:15px 14px 16px;background:linear-gradient(145deg,#1b1a23,#17161c);border:1px solid #292732;border-radius:20px; }
+    .month-grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px 5px; }
+    .month-weekday { color:#716c7d;text-align:center;font-size:10px;font-weight:800;padding-bottom:4px; }
+    .date-cell { aspect-ratio:1;min-width:0;display:grid;place-items:center;position:relative;font-size:11px;font-weight:650;color:#aaa5b4;border-radius:9px;background:#24222b; }
+    .date-cell.empty { background:transparent; }
+    .date-cell.complete { color:#16121a;background:var(--flame-mid); }
+    .date-cell.today { outline:1px solid var(--flame);outline-offset:1px; }
+    .legend { display:flex;justify-content:center;gap:14px;color:var(--muted);font-size:10px;margin-top:12px; }
+    .legend span { display:flex;align-items:center;gap:5px; }
+    .legend i { display:inline-block;width:7px;height:7px;border-radius:3px;background:var(--flame-mid); }
+    .legend .empty-key { background:#302d38; }
+    .extinguished[hidden] { display:none; }
+    .extinguished { position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:24px; background:#030305; min-height:100dvh; }
+    .reignite-button { width:min(100%,320px); min-height:60px; border:1px solid #373440; border-radius:18px; background:linear-gradient(140deg,#17151d,#0c0b10); color:#f2edf8; font:800 16px/1 system-ui,sans-serif; letter-spacing:.01em; box-shadow:0 0 0 1px #ffffff05,inset 0 1px 0 #ffffff10; cursor:pointer; transition:transform .22s ease,border-color .5s ease,box-shadow .5s ease,background .5s ease; }
+    .reignite-button:active { transform:scale(.97); border-color:#8f879b; box-shadow:0 0 32px #b3a6d020; }
+    .reignite-button:focus-visible { outline:2px solid #f4eefb; outline-offset:4px; }
+    body.is-extinguished { background:#030305 !important; }
+    body.is-extinguished .screen-ambience, body.is-extinguished .app { display:none !important; }
+    @media (max-height:800px) { .flame-stage { height:clamp(190px,34vh,244px); } .hero { padding-top:0; } .section { margin-top:24px; } }
+    @media (prefers-reduced-motion:reduce) { .flame-waver { animation-duration:4.5s; } .flame-left { animation-duration:3.8s; } .flame-right { animation-duration:4.3s; } .flame-middle { animation-duration:3.6s; } .flame-core { animation-duration:3s; } .spark { animation-duration:4.5s; } .screen-ambience::before { animation-duration:12s; } .main-button::after { display:none; } }
+
+
+    /* Celebration polish v10: layered DOM/SVG feedback with optional synthesized Web Audio. */
+    .celebration-veil {
+      position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0; overflow:hidden;
+      background:
+        radial-gradient(ellipse at 50% 43%, color-mix(in srgb,var(--flame) 46%,transparent) 0%, transparent 61%),
+        radial-gradient(ellipse at 50% 77%, color-mix(in srgb,var(--ambient) 38%,transparent) 0%, transparent 66%);
+      transform:translateZ(0); will-change:opacity; contain:paint;
+    }
+    body.ignition-flash .celebration-veil { animation:veil-flare 1.18s cubic-bezier(.16,.76,.22,1) both; }
+    body.major-celebration .celebration-veil { animation:veil-flare-epic 1.9s cubic-bezier(.12,.76,.18,1) both; }
+    body.ignition-flash .screen-ambience { opacity:.68 !important; }
+    body.ignition-flash .screen-ambience::after { animation:global-light-burst 1.18s ease-out both; }
+    body.major-celebration .screen-ambience::after { animation:global-light-burst 1.8s cubic-bezier(.12,.74,.12,1) both; }
+    @keyframes veil-flare {
+      0% {opacity:0} 12% {opacity:.3} 27% {opacity:.72} 48% {opacity:.45} 100% {opacity:0}
+    }
+    @keyframes veil-flare-epic {
+      0% {opacity:0} 10% {opacity:.36} 24% {opacity:.9} 43% {opacity:.58} 62% {opacity:.28} 100% {opacity:0}
+    }
+    .flame-stage { --impact-power:1; }
+    .flame-stage[data-level="ember"] { --impact-power:1.08; }
+    .flame-stage[data-level="blaze"] { --impact-power:1.2; }
+    .flame-stage[data-level="inferno"] { --impact-power:1.34; }
+    .flame-stage[data-level="legend"] { --impact-power:1.48; }
+    .flame-stage.ignite .fire-scale { animation:ignite-flame-v9 .95s cubic-bezier(.14,.82,.18,1) both; }
+    .flame-stage.ignite .flame-waver { animation-duration:.62s !important; }
+    .flame-stage.ignite .flame-hotspot { animation:hotspot-surge .92s ease-out both; }
+    .flame-stage.ignite::before { animation:stage-bloom-v9 1.05s ease-out both; }
+    .flame-stage.ignite::after { animation:halo-awaken-v9 1.05s cubic-bezier(.12,.72,.2,1) both; }
+    .flame-stage.milestone .flame-waver { animation-duration:.48s !important; }
+    .flame-stage.epic .flame-hotspot { animation:hotspot-surge 1.6s ease-out both; }
+    @keyframes ignite-flame-v9 {
+      0% {transform:scale(calc(var(--fire-scale)*.76)) rotate(-2deg);filter:brightness(1)}
+      28% {transform:scale(calc(var(--fire-scale)*1.2)) rotate(1.2deg);filter:brightness(1.6)}
+      48% {transform:scale(calc(var(--fire-scale)*1.13)) rotate(-.7deg);filter:brightness(1.35)}
+      72% {transform:scale(calc(var(--fire-scale)*1.035));filter:none}
+      100% {transform:scale(var(--fire-scale));filter:brightness(1)}
+    }
+    @keyframes stage-bloom-v9 {
+      0% {opacity:.4;transform:scale(.88)} 28% {opacity:1;transform:scale(1.22)} 60% {opacity:.9;transform:scale(1.08)} 100% {opacity:.76;transform:scale(1)}
+    }
+    @keyframes halo-awaken-v9 {
+      0% {opacity:.1;transform:perspective(180px) rotateX(58deg) scale(.52)}
+      32% {opacity:.88;transform:perspective(180px) rotateX(58deg) scale(1.9)}
+      68% {opacity:.56;transform:perspective(180px) rotateX(58deg) scale(1.36)}
+      100% {opacity:.28;transform:perspective(180px) rotateX(58deg) scale(1)}
+    }
+    @keyframes hotspot-surge {
+      0% {opacity:.28;transform:scale(.55) translateY(8px)} 30% {opacity:1;transform:scale(1.42) translateY(-7px)}
+      64% {opacity:.86;transform:scale(1.16) translateY(-2px)} 100% {opacity:.58;transform:scale(1)}
+    }
+    .burst-layer { z-index:5; }
+    .burst-particle {
+      z-index:4;  box-shadow:0 0 8px var(--particle-color,var(--flame-mid)),0 0 16px color-mix(in srgb,var(--particle-color,var(--flame-mid)) 55%,transparent);
+      animation-name:particle-burst-v9; animation-timing-function:cubic-bezier(.12,.72,.18,1);
+    }
+    @keyframes particle-burst-v9 {
+      0% {opacity:0;transform:translate(-50%,-50%) scale(.18) rotate(0deg)}
+      11% {opacity:1;transform:translate(-50%,-50%) scale(1.18) rotate(12deg)}
+      72% {opacity:.92;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1) rotate(48deg)}
+      100% {opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.2) rotate(72deg)}
+    }
+    .burst-particle.star {  }
+    .burst-particle.diamond { border-radius:2px; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+    .burst-particle.streak { width:var(--streak-width,3px); height:var(--streak-height,17px); border-radius:99px; background:linear-gradient(to top,transparent,var(--particle-color,var(--flame-core)) 55%,#fff); box-shadow:0 0 8px var(--particle-color,var(--flame-mid)); }
+    .burst-flare {
+      position:absolute; left:50%; top:var(--flare-y,77%); width:var(--flare-size,180px); aspect-ratio:1; border-radius:50%;
+      pointer-events:none; opacity:0; transform:translate(-50%,-50%) scale(.12); z-index:1;
+      background:radial-gradient(circle, color-mix(in srgb,var(--flame-core) 82%,transparent) 0%, color-mix(in srgb,var(--flame) 52%,transparent) 17%, color-mix(in srgb,var(--ambient) 28%,transparent) 38%, transparent 70%);
+      filter:blur(2px); animation:flare-expansion 1s cubic-bezier(.12,.72,.2,1) var(--delay,0s) both; 
+    }
+    .burst-flare.secondary { width:calc(var(--flare-size,180px)*.68); animation-delay:.13s; opacity:0; filter:blur(5px); }
+    @keyframes flare-expansion {
+      0% {opacity:0;transform:translate(-50%,-50%) scale(.12)} 17% {opacity:.9} 42% {opacity:.66;transform:translate(-50%,-50%) scale(1.05)} 100% {opacity:0;transform:translate(-50%,-50%) scale(1.75)}
+    }
+    .burst-ring {
+      left:50%; top:var(--ring-y,78%); width:var(--ring-width,25%); height:var(--ring-height,13%);
+      border:2px solid var(--ring-color,var(--flame-mid)); box-shadow:0 0 10px color-mix(in srgb,var(--ring-color,var(--flame-mid)) 65%,transparent),inset 0 0 7px color-mix(in srgb,var(--ring-color,var(--flame-mid)) 25%,transparent);
+       animation:ring-burst-v9 var(--ring-duration,1.15s) cubic-bezier(.08,.68,.14,1) var(--ring-delay,0s) both;
+    }
+    .burst-ring.ring-two { width:35%; height:18%; border-style:dashed; animation-duration:1.45s; }
+    .burst-ring.ring-three { width:17%; height:9%; border-style:dotted; border-width:1px; animation-duration:1.7s; }
+    @keyframes ring-burst-v9 {
+      0% {opacity:0;transform:translate(-50%,-50%) scale(.18) rotate(-12deg)}
+      16% {opacity:.92} 58% {opacity:.62} 100% {opacity:0;transform:translate(-50%,-50%) scale(3.25) rotate(10deg)}
+    }
+    .burst-orbit {
+      position:absolute; left:50%; top:var(--orbit-y,77%); width:var(--orbit-width,48%); height:var(--orbit-height,19%);
+      border:1.5px solid color-mix(in srgb,var(--flame-mid) 82%,transparent); border-radius:50%; opacity:0; pointer-events:none;
+      box-shadow:0 0 9px color-mix(in srgb,var(--flame) 45%,transparent); transform:translate(-50%,-50%) rotate(var(--orbit-angle,-15deg)) scale(.25);
+      animation:orbit-awaken 1.5s cubic-bezier(.12,.7,.16,1) var(--orbit-delay,.08s) both; 
+    }
+    .burst-orbit.orbit-two { border-style:dashed; border-color:color-mix(in srgb,var(--flame-core) 75%,transparent); animation-duration:1.9s; }
+    @keyframes orbit-awaken {
+      0% {opacity:0;transform:translate(-50%,-50%) rotate(var(--orbit-angle,-15deg)) scale(.25)}
+      22% {opacity:.78} 64% {opacity:.42} 100% {opacity:0;transform:translate(-50%,-50%) rotate(calc(var(--orbit-angle,-15deg) + 28deg)) scale(1.9)}
+    }
+    .burst-ray {
+      position:absolute; left:50%; top:var(--ray-y,78%); width:var(--ray-width,2px); height:var(--ray-height,54px); border-radius:999px;
+      transform-origin:50% 100%; transform:translate(-50%,-100%) rotate(var(--angle,0deg)) scaleY(.08); opacity:0; pointer-events:none;
+      background:linear-gradient(to top,transparent 0%,color-mix(in srgb,var(--ray-color,var(--flame-mid)) 45%,transparent) 28%,var(--ray-color,var(--flame-mid)) 88%,#fff 100%);
+      box-shadow:0 0 8px color-mix(in srgb,var(--ray-color,var(--flame-mid)) 65%,transparent);
+      animation:ray-unfurl .9s cubic-bezier(.1,.78,.18,1) var(--ray-delay,0s) both; 
+    }
+    @keyframes ray-unfurl {
+      0% {opacity:0;transform:translate(-50%,-100%) rotate(var(--angle,0deg)) scaleY(.08)}
+      19% {opacity:.82} 52% {opacity:.56;transform:translate(-50%,-100%) rotate(var(--angle,0deg)) scaleY(.78)}
+      100% {opacity:0;transform:translate(-50%,-100%) rotate(var(--angle,0deg)) scaleY(1.1)}
+    }
+    .main-button .button-label { position:relative; z-index:3; }
+    .main-button .button-star {
+      position:absolute; z-index:3; right:20px; top:50%; color:#fff; opacity:0; font-size:22px; line-height:1;
+      transform:translateY(-50%) rotate(-35deg) scale(.4); text-shadow:0 0 8px #fff,0 0 20px var(--flame);
+    }
+    .main-button.ignite { position:relative; animation:button-ignite-v9 .88s cubic-bezier(.12,.86,.18,1) both; box-shadow:0 0 0 1px color-mix(in srgb,var(--flame) 62%,transparent),0 0 22px color-mix(in srgb,var(--flame) 42%,transparent),0 0 54px color-mix(in srgb,var(--ambient) 36%,transparent),inset 0 1px 0 #ffffffbd; }
+    .main-button.ignite::before { z-index:0; background:radial-gradient(circle,#fff 0%,color-mix(in srgb,var(--flame-core) 82%,transparent) 18%,color-mix(in srgb,var(--flame) 46%,transparent) 42%,transparent 72%); mix-blend-mode:screen; animation:button-ripple-v9 .8s cubic-bezier(.14,.74,.2,1) both; }
+    .main-button.ignite::after { z-index:1; opacity:1; animation:button-sweep-v9 .84s cubic-bezier(.15,.72,.2,1) both; }
+    .main-button.ignite .button-star { animation:button-star-rise .9s cubic-bezier(.12,.8,.2,1) both; }
+    .main-button.ignite.milestone { animation:button-milestone-v9 1.12s cubic-bezier(.12,.86,.18,1) both; }
+    .main-button.ignite.epic { box-shadow:0 0 0 1px #ffffff9c,0 0 30px color-mix(in srgb,var(--flame) 68%,transparent),0 0 76px color-mix(in srgb,var(--ambient) 50%,transparent),inset 0 1px 0 #fff; }
+    @keyframes button-ignite-v9 {
+      0% {transform:scale(1);filter:brightness(1)} 18% {transform:scale(.965);filter:brightness(1.02)}
+      38% {transform:scale(1.035);filter:none} 58% {transform:scale(.99);filter:none} 78% {transform:scale(1.012);filter:none} 100% {transform:scale(1);filter:brightness(1)}
+    }
+    @keyframes button-milestone-v9 { 0% {transform:scale(1)} 20% {transform:scale(.955)} 42% {transform:scale(1.055);filter:brightness(1.4)} 65% {transform:scale(.985)} 82% {transform:scale(1.018)} 100% {transform:scale(1)} }
+    @keyframes button-ripple-v9 { 0% {opacity:.9;transform:translate(-50%,-50%) scale(.08)} 42% {opacity:.55} 100% {opacity:0;transform:translate(-50%,-50%) scale(36)} }
+    @keyframes button-sweep-v9 { 0% {transform:translateX(-82%) rotate(8deg);opacity:0} 18% {opacity:1} 100% {transform:translateX(80%) rotate(8deg);opacity:0} }
+    @keyframes button-star-rise { 0% {opacity:0;transform:translateY(7px) rotate(-35deg) scale(.3)} 35% {opacity:1;transform:translateY(-50%) rotate(15deg) scale(1.25)} 100% {opacity:0;transform:translateY(-90%) rotate(75deg) scale(.3)} }
+    .count.pop { text-shadow:0 0 22px color-mix(in srgb,var(--flame) 55%,transparent); animation:count-impact-v9 .66s cubic-bezier(.16,.88,.2,1) both; }
+    @keyframes count-impact-v9 { 0% {transform:translateY(12px) scale(.72);filter:brightness(.9);opacity:.55} 35% {transform:translateY(-7px) scale(1.16);filter:brightness(1.6);opacity:1} 58% {transform:translateY(2px) scale(.97)} 78% {transform:translateY(-2px) scale(1.04)} 100% {transform:translateY(0) scale(1);filter:brightness(1);opacity:1} }
+    body.major-celebration .flame-stage::before { animation:stage-bloom-v9 1.65s cubic-bezier(.12,.8,.2,1) both; }
+    body.major-celebration .count { text-shadow:0 0 14px var(--flame),0 0 36px color-mix(in srgb,var(--ambient) 75%,transparent); }
+    @media (prefers-reduced-motion:reduce) {
+      .celebration-veil,.burst-particle,.burst-flare,.burst-ring,.burst-orbit,.burst-ray { animation-duration:1.25s !important; }
+      .flame-stage.ignite .flame-waver { animation-duration:1.3s !important; }
+    }
+
+
+    /* v13: pre-rendered transparent animation assets; avoid live SVG/DOM particle simulation. */
+    .screen-ambience::before,.screen-ambience::after { animation:none !important; transform:none !important; }
+    .flame-stage::before,.flame-stage::after { animation:none !important; transform:none !important; }
+    .flame-stage::before { opacity:var(--stage-glow,.48); }
+    .flame-stage::after { opacity:var(--halo-opacity,.25); }
+    .fire-animation { position:absolute; z-index:1; left:50%; bottom:0; width:min(100%,310px); height:100%; object-fit:contain; object-position:center bottom; display:block; pointer-events:none; background:transparent; opacity:1; transform:translateX(-50%) scale(var(--fire-scale,.48)); transform-origin:50% 100%; transition:transform .48s cubic-bezier(.2,.8,.2,1); will-change:transform; }
+    .flame-stage.ignite .fire-animation { animation:fire-impact-prebuilt .9s cubic-bezier(.14,.82,.18,1) both; }
+    .flame-stage.milestone .fire-animation { animation:fire-milestone-prebuilt 1.15s cubic-bezier(.12,.8,.16,1) both; }
+    .flame-stage.epic .fire-animation { animation:fire-epic-prebuilt 1.45s cubic-bezier(.12,.8,.16,1) both; }
+    @keyframes fire-impact-prebuilt { 0%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.87))} 24%{transform:translateX(-50%) scale(calc(var(--fire-scale)*1.13))} 52%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.98))} 100%{transform:translateX(-50%) scale(var(--fire-scale))} }
+    @keyframes fire-milestone-prebuilt { 0%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.72))} 25%{transform:translateX(-50%) scale(calc(var(--fire-scale)*1.23))} 58%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.96))} 100%{transform:translateX(-50%) scale(var(--fire-scale))} }
+    @keyframes fire-epic-prebuilt { 0%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.65))} 23%{transform:translateX(-50%) scale(calc(var(--fire-scale)*1.32))} 48%{transform:translateX(-50%) scale(calc(var(--fire-scale)*1.05))} 75%{transform:translateX(-50%) scale(calc(var(--fire-scale)*.98))} 100%{transform:translateX(-50%) scale(var(--fire-scale))} }
+    /* Only one pre-rendered overlay is decoded at a time to reduce memory and frame work. */
+    .prebuilt-impact { position:fixed; inset:0; z-index:8; pointer-events:none; overflow:hidden; opacity:0; visibility:hidden; contain:strict; }
+    .prebuilt-impact.active { visibility:visible; animation:impact-screen-out 1.55s ease-out both; }
+    .prebuilt-impact img { display:block; width:100%; height:100%; object-fit:cover; opacity:.96; }
+    .prebuilt-impact.epic img { opacity:1; }
+    @keyframes impact-screen-out { 0%{opacity:0} 8%{opacity:.98} 38%{opacity:.9} 100%{opacity:0} }
+    .screen-ambience { opacity:var(--ambient-opacity); }
+    body.ignition-flash .screen-ambience { opacity:1 !important; }
+    body.celebrating .screen-ambience { opacity:1 !important; }
+    body.major-celebration .screen-ambience { opacity:1 !important; }
+    .fire-svg,.flame-waver,.flame-left,.flame-right,.flame-middle,.flame-core,.flame-hotspot,.spark,.dynamic-spark { display:none !important; }
+    .burst-particle,.burst-flare,.burst-ring,.burst-orbit,.burst-ray,.celebration-veil,.burst-layer { display:none !important; }
+    .viewport-changing .fire-animation { animation-play-state:paused !important; }
+    .viewport-changing .prebuilt-impact { animation-play-state:paused !important; }
+    @media (prefers-reduced-motion:reduce) { .fire-animation { transition:none; } .burst-animation.show,.prebuilt-impact.active { animation-duration:.9s; } }
+
+  </style>
+</head>
+<body>
+  <div class="screen-ambience" id="screenAmbience" aria-hidden="true"></div>
+  <div class="celebration-veil" id="celebrationVeil" aria-hidden="true"></div>
+  <div class="prebuilt-impact" id="prebuiltImpact" aria-hidden="true"><img id="impactAnimation" alt=""></div>
+  <audio id="audioIgnite" preload="auto" src="./ignite.wav"></audio>
+  <audio id="audioMilestone" preload="auto" src="./milestone.wav"></audio>
+  <audio id="audioEpic" preload="auto" src="./epic.wav"></audio>
+  <main class="app" id="app">
+    <header>
+      <div class="brand">ALEV SERİSİ</div>
+      <button class="sound-toggle" id="soundToggle" type="button" aria-pressed="true" aria-label="Ses efektlerini kapat" title="Ses efektlerini kapat">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <section class="hero" aria-label="Günlük seri">
+      <div class="flame-stage" id="flameStage" data-theme="blue" aria-hidden="true">
+        <img id="fireAnimation" class="fire-animation" data-theme="blue" src="./flame-blue.webp" alt="" decoding="async" fetchpriority="high">
+
+      </div>
+      <div class="counter">
+        <div class="count" id="count">0</div>
+        <div class="count-label" id="countLabel">GÜNLÜK SERİ</div>
+      </div>
+      <div class="subtitle" id="subtitle" aria-live="polite">İlk alevini yak.</div>
+      <button class="main-button" id="continueButton" type="button">Serimi devam ettir</button>
+    </section>
+
+    <section class="section" aria-labelledby="weekTitle">
+      <div class="section-head"><div class="section-title" id="weekTitle">BU HAFTA</div><div class="section-note" id="weekNote">Her gün bir kıvılcım.</div></div>
+      <div class="week" id="week"></div>
+    </section>
+    <section class="section" aria-labelledby="monthTitle">
+      <button class="month-toggle" id="monthToggle" type="button" aria-expanded="false" aria-controls="monthPanel">
+        <span id="monthTitle">AYLIK SERİ</span>
+        <span class="month-toggle-side"><span id="monthLabel"></span><svg class="chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </button>
+      <div class="month-panel" id="monthPanel" hidden><div class="month-card"><div class="month-grid" id="monthGrid"></div><div class="legend"><span><i></i> Seriye devam edildi</span><span><i class="empty-key"></i> Henüz değil</span></div></div></div>
+    </section>
+  </main>
+  <section class="extinguished" id="extinguishedScreen" hidden aria-label="Alev söndü">
+    <button class="reignite-button" id="reigniteButton" type="button">Alevi yeniden yak</button>
+  </section>
+<script>
+(() => {
+  'use strict';
+  const STORAGE_KEY = 'alev-serisi-v12';
+  const MAJOR_MILESTONES = [50,105,180,225,245];
+  const stages = [
+    {name:'Mavi Kıvılcım',color:'#36b9ff',mid:'#9ae8ff',core:'#f8ffff',ambient:'#168dff',theme:'blue'},
+    {name:'Hafif Turuncu',color:'#ffb267',mid:'#ffdab0',core:'#fff8e8',ambient:'#e68a3a',theme:'orange'},
+    {name:'Kızıl Kor',color:'#ff405b',mid:'#ff9aaa',core:'#ffe9ee',ambient:'#d91f42',theme:'red'},
+    {name:'Beyaz Alev',color:'#edf8ff',mid:'#ffffff',core:'#ffffff',ambient:'#91c8ff',theme:'white'},
+    {name:'Mor Nebula',color:'#b58aff',mid:'#dfc3ff',core:'#fff6ff',ambient:'#7037d5',theme:'purple'},
+    {name:'Zümrüt Ateşi',color:'#38e0a5',mid:'#a8ffe0',core:'#f3fff9',ambient:'#087d67',theme:'emerald'},
+    {name:'Altın Güneş',color:'#ffd34e',mid:'#fff0a1',core:'#fffdf0',ambient:'#b97913',theme:'gold'},
+    {name:'Pembe Nebula',color:'#ff6dc8',mid:'#ffc2ea',core:'#fff7fc',ambient:'#b82a83',theme:'pink'},
+    {name:'Turkuaz Dalga',color:'#32e6d2',mid:'#b1fff5',core:'#f4fffd',ambient:'#087e94',theme:'turquoise'},
+    {name:'Yeşil Aurora',color:'#b8f15e',mid:'#e8ffae',core:'#fbffe9',ambient:'#527e25',theme:'lime'}
+  ];
+  // Renk değişimleri: 5, ardından 10, 15 ... 45 günlük aralıklarla. Son renk 225. günde başlar; alev 245. günde tam boyuna ulaşır.
+  const JOURNEY_END=245;
+  const milestones=[5,15,30,50,75,105,140,180,225];
+  const $=id=>document.getElementById(id);
+  const root=document.documentElement;
+
+  // Ses efektleri önceden hazırlanmış WAV dosyalarıdır; telefonda ses sentezlenmez.
+  const SOUND_KEY='alev-serisi-sound-v2';
+  let soundEnabled=readSoundPreference();
+  function readSoundPreference(){try{return localStorage.getItem(SOUND_KEY)!=='off';}catch{return true;}}
+  function saveSoundPreference(){try{localStorage.setItem(SOUND_KEY,soundEnabled?'on':'off');}catch{}}
+  function updateSoundButton(){
+    const btn=$('soundToggle'); if(!btn)return;
+    btn.setAttribute('aria-pressed',String(soundEnabled));
+    btn.setAttribute('aria-label',soundEnabled?'Ses efektlerini kapat':'Ses efektlerini aç');
+    btn.title=soundEnabled?'Ses efektlerini kapat':'Ses efektlerini aç';
+    btn.innerHTML=soundEnabled
+      ? '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m17 9 5 6m0-6-5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  }
+  function playIgnitionSound(isMilestone=false,isMajor=false){
+    if(!soundEnabled)return;
+    const audio=$(isMajor?'audioEpic':isMilestone?'audioMilestone':'audioIgnite');
+    if(!audio)return;
+    try{audio.pause();audio.currentTime=0;audio.volume=isMajor?.84:isMilestone?.72:.58;const result=audio.play();if(result&&typeof result.catch==='function')result.catch(()=>{});}catch{}
+  }
+  let data=loadData();
+  function loadData(){
+    try { const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); return {
+      count:Number.isFinite(saved.count)?Math.max(0,Math.floor(saved.count)):0,
+      lastDate:typeof saved.lastDate==='string'?saved.lastDate:null,
+      completed:Array.isArray(saved.completed)?saved.completed.filter(x=>typeof x==='string' && /^\d{4}-\d{2}-\d{2}$/.test(x)).slice(-500):[]
+    }; } catch { return {count:0,lastDate:null,completed:[]}; }
+  }
+  function saveData(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch{}}
+  function dateKey(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+  function fromKey(key){const [y,m,d]=key.split('-').map(Number);return new Date(y,m-1,d,12,0,0,0);}
+  function dayDifference(a,b){return Math.round((fromKey(b).getTime()-fromKey(a).getTime())/86400000);}
+  function todayKey(){return dateKey(new Date());}
+  function missedDay(){
+    if(!data.lastDate || data.count<1) return false;
+    return dayDifference(data.lastDate,todayKey())>1;
+  }
+  function currentCount(){
+    if(!data.lastDate)return 0;
+    const diff=dayDifference(data.lastDate,todayKey());
+    return (diff===0||diff===1)?data.count:0;
+  }
+  function getStage(count){
+    const safe=Math.max(0,Math.min(JOURNEY_END,count));let index=0;
+    while(index<milestones.length&&safe>=milestones[index])index++;
+    const start=index===0?0:milestones[index-1];
+    const end=index<milestones.length?milestones[index]:JOURNEY_END;
+    const progress=Math.max(0,Math.min(1,(safe-start)/Math.max(1,end-start)));
+    const daysToChange=index<milestones.length?Math.max(0,milestones[index]-safe):Math.max(0,JOURNEY_END-safe);
+    return {index,progress,daysToChange};
+  }
+  function setTheme(count){
+    const state=getStage(count),stage=stages[state.index];
+    root.style.setProperty('--flame',stage.color);
+    root.style.setProperty('--flame-mid',stage.mid);
+    root.style.setProperty('--flame-core',stage.core);
+    root.style.setProperty('--ambient',stage.ambient);
+    document.body.dataset.theme=stage.theme;
+    $('flameStage').dataset.theme=stage.theme;
+    // Alev boyutu toplam 245 güne göre değil, mevcut renk aşamasının kendi aralığına göre büyür.
+    // Her milestone'da state.progress sıfırlanır; alev yeni renkte küçük boyuta döner.
+    const progress=state.progress;
+    const overall=Math.max(0,Math.min(1,count/JOURNEY_END));
+    const scale=.47+.49*Math.pow(progress,.78);
+    root.style.setProperty('--fire-scale',scale.toFixed(4));
+    root.style.setProperty('--fire-glow',(0.25+progress*.62+state.index*.025).toFixed(2));
+    root.style.setProperty('--spark-opacity',(0.35+progress*.5+state.index*.025).toFixed(2));
+    root.style.setProperty('--ambient-opacity',(0.13+0.46*Math.pow(overall,.68)+state.index*.012).toFixed(2));
+    $('flameStage').style.setProperty('--stage-boost',progress.toFixed(3));
+    $('flameStage').style.setProperty('--stage-glow',(0.25+progress*.48+state.index*.025).toFixed(2));
+    $('flameStage').style.setProperty('--halo-opacity',(0.10+progress*.3+state.index*.012).toFixed(2));
+    $('flameStage').dataset.level=count<15?'spark':count<75?'ember':count<140?'blaze':count<225?'inferno':'legend';
+    const fire=$('fireAnimation');
+    if(fire && fire.dataset.theme!==stage.theme){ fire.dataset.theme=stage.theme; fire.src=`./${assetsPaused?'flame-'+stage.theme+'-poster.webp':'flame-'+stage.theme+'.webp'}`; }
+    const effect=$('burstAnimation'); if(effect) effect.dataset.theme=stage.theme;
+    $('countLabel').textContent=count>JOURNEY_END?'SERİN DEVAM EDİYOR':count===JOURNEY_END?'ALEVİN SON AŞAMASI':'GÜNLÜK SERİ';
+    const completedToday=data.lastDate===todayKey();
+    const button=$('continueButton');
+    button.classList.toggle('done',completedToday);
+    button.disabled=completedToday;
+    button.innerHTML=completedToday
+      ? '<span class="button-label">Bugün tamamlandı ✓</span>'
+      : '<span class="button-label">Serimi devam ettir</span><span class="button-star" aria-hidden="true">✦</span>';
+    let msg;
+    if(count===0) msg='İlk alevini yak.';
+    else if(count>=JOURNEY_END) msg=completedToday?'Bugünkü serin tamam. Yarın yeniden gel. 🔥':'Alevin en büyük hâlinde. Serin devam ediyor! 🔥';
+    else if(completedToday && state.index<milestones.length) msg=state.daysToChange===1?'Bugünkü serin tamam. Yarın alevin renk değiştirecek. 🔥':`Bugünkü serin tamam. ${state.daysToChange} gün sonra yeni renk. 🔥`;
+    else if(completedToday) msg=state.daysToChange===1?'Bugünkü serin tamam. Yarın son boyutuna ulaşacak. 🔥':`Bugünkü serin tamam. ${state.daysToChange} gün sonra son boyutuna ulaşacak. 🔥`;
+    else if(state.index<milestones.length) msg=`${stage.name} · ${state.daysToChange} gün sonra renk değişimi`;
+    else msg=`${stage.name} · ${state.daysToChange} gün sonra son boyut`;
+    $('subtitle').textContent=msg;
+  }
+  function renderWeek(){
+    const container=$('week');container.innerHTML='';const today=new Date();today.setHours(12,0,0,0);
+    const monday=new Date(today);monday.setDate(today.getDate()-((today.getDay()+6)%7));
+    const names=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+    for(let i=0;i<7;i++){
+      const date=new Date(monday);date.setDate(monday.getDate()+i);const key=dateKey(date);const completed=data.completed.includes(key);const isToday=key===todayKey();
+      const item=document.createElement('div');item.className='day';const name=document.createElement('div');name.className='day-name';name.textContent=names[i];
+      const dot=document.createElement('div');dot.className='day-dot'+(completed?' completed':'')+(isToday?' today':'');dot.textContent=completed?'✓':String(date.getDate());item.append(name,dot);container.append(item);
+    }
+    const total=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(monday.getDate()+i);return data.completed.includes(dateKey(d));}).filter(Boolean).length;
+    $('weekNote').textContent=`${total}/7 gün`;
+  }
+  function renderMonth(){
+    const now=new Date();const year=now.getFullYear(),month=now.getMonth();
+    $('monthLabel').textContent=new Intl.DateTimeFormat('tr-TR',{month:'long',year:'numeric'}).format(now);
+    const grid=$('monthGrid');grid.innerHTML='';
+    ['P','S','Ç','P','C','C','P'].forEach(label=>{const el=document.createElement('div');el.className='month-weekday';el.textContent=label;grid.append(el);});
+    const firstDay=new Date(year,month,1,12);const offset=(firstDay.getDay()+6)%7;const totalDays=new Date(year,month+1,0).getDate();
+    for(let i=0;i<offset;i++){const blank=document.createElement('div');blank.className='date-cell empty';grid.append(blank);}
+    for(let day=1;day<=totalDays;day++){const date=new Date(year,month,day,12);const key=dateKey(date);const el=document.createElement('div');el.className='date-cell'+(data.completed.includes(key)?' complete':'')+(key===todayKey()?' today':'');el.textContent=String(day);grid.append(el);}
+  }
+  function render(){
+    const expired=missedDay();
+    $('app').hidden=expired;
+    $('extinguishedScreen').hidden=!expired;
+    document.body.classList.toggle('is-extinguished',expired);
+    if(expired){clearBurst();return;}
+    const count=currentCount();
+    $('count').textContent=String(count);
+    setTheme(count);
+    renderWeek();renderMonth();
+  }
+
+  let impactTimer=0,celebrationTimer=0;
+  let assetsPaused=false;
+  function setAssetPlaybackPaused(paused){
+    const fire=$('fireAnimation');
+    if(paused){
+      if(assetsPaused)return;
+      assetsPaused=true;
+      clearBurst();
+      if(fire){const theme=fire.dataset.theme||'blue';fire.src=`./flame-${theme}-poster.webp`;}
+      return;
+    }
+    if(!assetsPaused)return;
+    assetsPaused=false;
+    if(fire){const theme=fire.dataset.theme||stages[getStage(currentCount()).index].theme;fire.src=`./flame-${theme}.webp`;}
+  }
+  function clearBurst(){
+    if(impactTimer)clearTimeout(impactTimer);impactTimer=0;
+    const impact=$('prebuiltImpact');
+    if(impact){impact.classList.remove('active','epic');const img=$('impactAnimation');if(img){img.removeAttribute('src');img.onload=null;}}
+  }
+  function flashAmbience(isMajor,isMilestone){
+    if(celebrationTimer)clearTimeout(celebrationTimer);
+    document.body.classList.remove('ignition-flash','celebrating','major-celebration');
+    document.body.classList.add('ignition-flash');
+    if(isMilestone)document.body.classList.add('celebrating');
+    if(isMajor)document.body.classList.add('major-celebration');
+    const duration=isMajor?1800:isMilestone?1400:850;
+    celebrationTimer=setTimeout(()=>{document.body.classList.remove('ignition-flash','celebrating','major-celebration');celebrationTimer=0;},duration);
+  }
+  function makeBurst(isMilestone,count=currentCount()){
+    clearBurst();
+    const state=getStage(count),theme=stages[state.index].theme;
+    const major=MAJOR_MILESTONES.includes(count)||(count===JOURNEY_END&&count>0);
+    const kind=(isMilestone||major)?'milestone':'burst';
+    const src=`./${kind}-${theme}.webp`;
+    const impact=$('prebuiltImpact'),img=$('impactAnimation');
+    impact.classList.remove('active','epic');
+    img.removeAttribute('src');
+    img.onload=()=>{
+      // Reveal only after the encoded animation is ready, preventing a blank flash on first play.
+      impact.classList.add('active');
+      if(major)impact.classList.add('epic');
+    };
+    img.onerror=()=>{impact.classList.remove('active','epic');};
+    img.src=src;
+    if(img.complete && img.naturalWidth>0){impact.classList.add('active');if(major)impact.classList.add('epic');}
+    const ttl=major?2050:isMilestone?1650:1300;
+    impactTimer=setTimeout(()=>{impact.classList.remove('active','epic');img.removeAttribute('src');img.onload=null;impactTimer=0;},ttl);
+    flashAmbience(major,isMilestone);
+  }
+  function replayButtonAnimation(event,isMilestone=false,isMajor=false){
+    const button=$('continueButton'),rect=button.getBoundingClientRect();
+    if(event&&Number.isFinite(event.clientX)){
+      button.style.setProperty('--tap-x',`${Math.max(0,Math.min(100,(event.clientX-rect.left)/rect.width*100))}%`);
+      button.style.setProperty('--tap-y',`${Math.max(0,Math.min(100,(event.clientY-rect.top)/rect.height*100))}%`);
+    } else { button.style.setProperty('--tap-x','50%');button.style.setProperty('--tap-y','50%'); }
+    button.classList.remove('ignite','milestone','epic');void button.offsetWidth;button.classList.add('ignite');
+    if(isMilestone)button.classList.add('milestone');
+    if(isMajor)button.classList.add('epic');
+    $('count').classList.remove('pop');void $('count').offsetWidth;$('count').classList.add('pop');
+    const flame=$('flameStage');flame.classList.remove('ignite','milestone','epic');void flame.offsetWidth;flame.classList.add('ignite');
+    if(isMilestone)flame.classList.add('milestone');
+    if(isMajor)flame.classList.add('epic');
+    setTimeout(()=>button.classList.remove('ignite','milestone','epic'),isMajor?2200:1500);
+    setTimeout(()=>flame.classList.remove('ignite','milestone','epic'),isMajor?2300:1750);
+    setTimeout(()=>$('count').classList.remove('pop'),800);
+  }
+  $('monthToggle').addEventListener('click',()=>{const btn=$('monthToggle'),open=btn.getAttribute('aria-expanded')==='true';btn.setAttribute('aria-expanded',String(!open));$('monthPanel').hidden=open;});
+  function addCompletedDate(today){
+    if(!data.completed.includes(today))data.completed.push(today);
+    data.completed=data.completed.filter(key=>dayDifference(key,today)<=500).sort();
+  }
+  function igniteFreshStreak(){
+    const today=todayKey();
+    data.count=1;
+    data.lastDate=today;
+    addCompletedDate(today);
+    saveData();
+    render();
+    replayButtonAnimation(null,false,false);
+    makeBurst(false,1);
+    playIgnitionSound(false,false);
+  }
+  $('reigniteButton').addEventListener('click',igniteFreshStreak);
+  $('soundToggle').addEventListener('click',()=>{
+    soundEnabled=!soundEnabled;saveSoundPreference();updateSoundButton();
+    if(soundEnabled)playIgnitionSound(false,false);
+  });
+  $('continueButton').addEventListener('click',event=>{
+    const today=todayKey();
+    if(missedDay()){render();return;}
+    if(data.lastDate===today)return;
+    const previous=currentCount();
+    const gap=data.lastDate?dayDifference(data.lastDate,today):null;
+    data.count=(gap===1)?Math.max(1,data.count+1):1;
+    data.lastDate=today;
+    addCompletedDate(today);
+    saveData();
+    const next=data.count,previousStage=getStage(previous).index,nextStage=getStage(next).index;
+    const milestone=nextStage!==previousStage||milestones.includes(next)||(next===JOURNEY_END&&previous<JOURNEY_END);
+    render();
+    const major=MAJOR_MILESTONES.includes(next);
+    replayButtonAnimation(event,milestone,major);
+    makeBurst(milestone,next);
+    playIgnitionSound(milestone,major);
+  });
+  updateSoundButton();
+  render();
+  window.addEventListener('pageshow',render);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){document.body.classList.add('viewport-changing');setAssetPlaybackPaused(true);}
+    else {document.body.classList.remove('viewport-changing');setAssetPlaybackPaused(false);render();}
+  });
+  window.addEventListener('focus',render);
+  // Pinch-zoom sırasında pahalı animasyonları kısa süre durdurup sonra devam ettir.
+  let viewportPauseTimer=0;
+  const visualViewportRef=window.visualViewport;
+  if(visualViewportRef){
+    const pauseForViewport=()=>{
+      document.body.classList.add('viewport-changing');
+      setAssetPlaybackPaused(true);
+      if(viewportPauseTimer)clearTimeout(viewportPauseTimer);
+      viewportPauseTimer=setTimeout(()=>{document.body.classList.remove('viewport-changing');setAssetPlaybackPaused(false);viewportPauseTimer=0;},260);
+    };
+    visualViewportRef.addEventListener('resize',pauseForViewport,{passive:true});
+    visualViewportRef.addEventListener('scroll',pauseForViewport,{passive:true});
+  }
+  if('serviceWorker'in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+})();
+</script>
+</body>
+</html>
